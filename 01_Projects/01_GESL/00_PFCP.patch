@@ -1,0 +1,11 @@
+✅ 1. High-Level Overview (Control & User Plane Separation)
+What is CUPS (Control and User Plane Separation)?
+
+Introduced in 3GPP Release 14, CUPS enables:
+
+Independent scaling of control plane (CP) and user plane (UP).
+
+Reduced latency by placing UPF near the edge (MEC).
+
+Dynamic UPF selection based on user location.
+

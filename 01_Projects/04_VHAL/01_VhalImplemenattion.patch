@@ -1,0 +1,199 @@
+✅ Vehicle HAL Design & Development Flow
+=====================================================
+
+🧭 1. Requirement Analysis
+🔹 Objective:
+Android Automotive must access vehicle properties (speed, gear, fuel, HVAC, etc.) via CarPropertyManager.
+
+🔹 Inputs from system team:
+Supported signals: Speed (CAN ID 0x100), Gear (0x101), Ignition (0x102)
+
+Signal timing: speed every 100ms, gear on change, ignition on key-on
+
+
+🧠 2. Design Considerations
+-----------------------
+-----------------------
+🔸 Interface Selection:
+- AIDL HAL (Post Android 11 standard)
+- Clean interface
+- Compatible with Android Framework
+- Supports subscription/event updates
+🔸 Access Modes:
+- READ-only: Speed, RPM, Gear
+- READ/WRITE: HVAC fan level, AC power
+🔸 Update Modes:
+- Continuous: Speed
+- On change: Gear
+- Static: VIN
+🔸 Communication Protocol:
+- Used SocketCAN for ECU/CAN bus integration
+- Defined a CAN ID-to-property mapping table for signal translation
+
+
+📐 3. System Architecture Planning
+-----------------------
+- Android Framework (CarPropertyManager)
+    |
+    v
+- Vehicle HAL (AIDL interface)
+    |
+    v
+- CAN Interface Layer (SocketCAN)
+    |
+    v
+- Vehicle ECU/Bus
+
+Description:
+- The Android Framework communicates with the Vehicle HAL using the AIDL interface.
+- The Vehicle HAL translates framework requests to CAN messages via the SocketCAN interface.
+- The CAN Interface Layer handles low-level CAN communication with the vehicle's ECU/bus.
+
+
++-------------+       +-----------------+     +------------------+     +-----------------+
+|  Car App    | <---> | Car Service API | <-> |  AIDL HAL Binder | <-> | Vehicle HAL Impl|
++-------------+       +-----------------+     +------------------+     +-----------------+
+                                                                        |
+                                                                        v
+                                                           +--------------------------+
+                                                           |  SocketCAN / UART Driver |
+                                                           +--------------------------+
+
+Key Design Goals:
+- Modular, extensible
+- Event-driven updates using threads
+- Real-time CAN parsing loop
+- Configurable CAN ID-property mappings (via JSON or table)
+
+📄 4. Property Definition & Mapping
+---------------------------------------------   
+Step 1: Select properties from AOSP VehicleProperty.aidl
+    PERF_VEHICLE_SPEED → Speed
+    CURRENT_GEAR → Gear
+    IGNITION_STATE → On/off
+
+Step 2: Define custom mapping table
+    // Example C++ code for CAN ID to VehicleProperty mapping
+    #include <unordered_map>
+    #include <cstdint>
+
+    enum class VehicleProperty {
+        PERF_VEHICLE_SPEED,
+        CURRENT_GEAR,
+        IGNITION_STATE
+    };
+
+    std::unordered_map<int32_t, VehicleProperty> canIdToProp = {
+        {0x100, VehicleProperty::PERF_VEHICLE_SPEED},
+        {0x101, VehicleProperty::CURRENT_GEAR},
+        {0x102, VehicleProperty::IGNITION_STATE}
+    };
+
+🧱 5. HAL Layer Implementation (C++ AIDL)
+-----------------------------------------
+
+Implemented Methods:
+- get()
+- set()
+- subscribe()
+- onPropertyEvent()
+
+Data flow in get():
+
+switch(propId) {
+  case VehicleProperty::PERF_VEHICLE_SPEED:
+    return cachedSpeedProp;
+}
+
+Polling Thread for Events:
+void pollingLoop() {
+  while (true) {
+    can_frame f = readCAN();
+    if (f.id == 0x100) {
+      updateSpeedProp(f.data);
+      notifyListeners(cachedSpeedProp);
+    } else if (f.id == 0x101) {
+      updateGearProp(f.data);
+      notifyListeners(cachedGearProp);
+    } else if (f.id == 0x102) {
+      updateIgnitionProp(f.data);
+      notifyListeners(cachedIgnitionProp);
+    }
+    usleep(100000); // 100ms
+  }
+}
+
+
+# 🧪 6. Test Strategy & Debugging
+# Testing Tools:
+# - vhal_test_client for get/set test
+# - Custom tool to inject CAN messages using cansend
+# - Used logcat + internal logs (ALOGD) for trace
+
+# Validation:
+# - Speed updated every 100ms
+# - Gear change sent within 50ms of CAN update
+# - Ignition mapped correctly on key ON
+
+🔐 7. Integration & System Registration
+
+Added in:
+
+vehicle.rc for init:
+    # Example entry
+    service veh_hal /vendor/bin/veh_hal
+        class hal
+        user system
+        group system
+        seclabel u:r:hal_vehicle_default:s0
+        oneshot
+
+vendor/manifest.xml for HAL registration:
+    <!-- Example entry -->
+    <hal format="aidl">
+        <name>android.hardware.automotive.vehicle</name>
+        <version>2</version>
+        <fqname>IVehicle/default</fqname>
+    </hal>
+
+hal_vehicle.te for SELinux policies:
+    # Example entry
+    type hal_vehicle_default, domain;
+    hal_server_domain(hal_vehicle_default, hal_vehicle)
+    allow hal_vehicle_default self:netlink_route_socket { create_socket_perms };
+    allow hal_vehicle_default can_device:chr_file rw_file_perms;
+
+🧰 8. Modularity and Extensibility
+
+- Created `VehicleInterface` class to allow mocking or swapping between:
+    - SocketCAN
+    - UART MCU
+    - Test injection source
+
+- Property list was table-driven (`property_config.cpp`) with:
+    - Prop ID
+    - Area
+    - Access mode
+    - Change mode
+    - Data type
+
+📌 9. Challenges Faced
+
+| Issue                           | Solution                                      |
+|----------------------------------|-----------------------------------------------|
+| Timing jitter in speed updates   | Buffered using thread-safe queue              |
+| HAL crash due to bad CAN data    | Implemented sanity checks, value bounds       |
+| Permission denied on /dev/can0   | SELinux + udev rules corrected                |
+| HAL not registering              | VINTF entry mismatch fixed in manifest        |
+
+✅ 10. Results and Ownership
+Full HAL development was completed as follows:
+
+- Full flow from CarService to CAN layer was designed.
+- Complete AIDL HAL and property mapping were implemented.
+- Polling and event thread system was created.
+- Validation was performed with tools, and latency issues were fixed.
+- Integration into the Android build was achieved with manifest, rc, and SEPolicy.
+
+The result was a production-ready VHAL, compliant with Android CTS.
+
