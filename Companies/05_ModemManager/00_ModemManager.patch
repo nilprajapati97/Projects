@@ -1,0 +1,55 @@
+✅ Interview-Ready Summary:
+"I worked on integrating and extending ModemManager on embedded Linux platforms to support cellular
+ connectivity (LTE/3G/2G) via USB or PCIe modems. My responsibilities included modem detection, 
+ D-Bus communication, AT/QMI interface handling, and end-to-end data call establishment through 
+ NetworkManager."
+
+
+✅ High-Level Summary (Interview Ready)
+“I integrated and extended ModemManager in our embedded Linux platform to manage USB and PCIe-based 
+cellular modems. My work covered modem enumeration, D-Bus integration, AT/QMI/MBIM protocol handling,
+and establishing end-to-end data calls via NetworkManager. I ensured modem state transitions, bearer
+management, and fallback across 4G/3G/2G technologies.”
+
+🧱 System Components Overview
+=====================================
+ +---------------------+
+ |      UI/CLI Tool    |  (e.g. mmcli, nmtui)
+ +---------------------+
+           ↓ D-Bus
+ +---------------------+
+ |    NetworkManager   |  <– DNS, Routing, IP config
+ +---------------------+
+           ↓ D-Bus
+ +---------------------+
+ |    ModemManager     |  <– Main controller
+ +---------------------+
+ | libqmi / libmbim / AT |
+ +---------------------+
+ |  USB/PCIe Modem (4G) |
+ +---------------------+
+
+
+
+🔁 End-to-End Modem Bring-Up Flow
+=====================================
+1. **Modem Detection**: ModemManager detects USB/PCIe modems via
+   udev events or PCI scanning.
+2. **D-Bus Registration**: ModemManager registers the modem on D-Bus
+   with properties like manufacturer, model, and capabilities.
+3. **Protocol Handling**: Depending on the modem type, it uses:
+   - **AT Commands**: For legacy modems (e.g. GSM/3G)
+   - **QMI**: For Qualcomm-based modems
+   - **MBIM**: For Windows-based modems
+4. **Bearer Management**: ModemManager creates a bearer
+   (data connection) using the appropriate protocol.
+5. **NetworkManager Integration**: It communicates with
+   NetworkManager to set up DNS, routing, and IP configuration.
+6. **Data Call Establishment**: ModemManager initiates a data call
+   through the bearer, which NetworkManager uses to configure
+   the network interface.
+7. **State Monitoring**: ModemManager monitors the modem state
+   (connected, disconnected, error) and updates NetworkManager
+   accordingly.
+8. **Fallback Handling**: If the primary connection fails, it
+   can fall back to 3G/2G based on signal strength and availability.    
